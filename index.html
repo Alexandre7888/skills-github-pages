@@ -10,6 +10,9 @@
       font-family: Arial, sans-serif;
       padding: 20px;
     }
+    header {
+      margin-bottom: 20px;
+    }
     .filme {
       background-color: #1f1f1f;
       padding: 15px;
@@ -36,11 +39,15 @@
       margin-right: 10px;
       display: inline-block;
     }
-
-    /* Estilo de foco (borda azul) */
-    .focused {
-      outline: 3px solid cyan !important;
-      border-radius: 10px;
+    
+    /* Improved focus styles for accessibility */
+    a:focus, button:focus, input:focus, [role="button"]:focus, .filme:focus-within {
+      outline: 3px solid #2196F3;
+      outline-offset: 2px;
+    }
+    /* Skip focus indicator on mouse interaction, only show for keyboard */
+    :focus:not(:focus-visible) {
+      outline: none;
     }
   </style>
 </head>
@@ -50,9 +57,13 @@
      height="468" 
      alt="Banner da plataforma de streaming" 
      style="display: block; width: 100%; max-width: 1920px; height: auto; margin: 0 auto;" />
-  <h1>Filmes Cadastrados</h1>
-  para assistir em tela cheia abra o link e faça login no Google
-  <div id="listaFilmes"></div>
+  <header>
+    <h1>Filmes Cadastrados</h1>
+    <p>Para assistir em tela cheia abra o link e faça login no Google</p>
+  </header>
+  <main>
+    <div id="listaFilmes" role="region" aria-label="Lista de filmes disponíveis"></div>
+  </main>
 
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -76,13 +87,13 @@
         const match = link.match(/[-\w]{25,}/);
         if (match) {
           const fileId = match[0];
-          return `<iframe src="https://drive.google.com/file/d/${fileId}/preview" allow="autoplay" tabindex="0"></iframe>`;
+          return `<iframe src="https://drive.google.com/file/d/${fileId}/preview" allow="autoplay" title="Reprodutor de vídeo do Google Drive"></iframe>`;
         }
       }
       if (link.endsWith(".mp4")) {
-        return `<video src="${link}" controls tabindex="0"></video>`;
+        return `<video src="${link}" controls></video>`;
       }
-      return `<iframe src="${link}" allow="autoplay" tabindex="0"></iframe>`;
+      return `<iframe src="${link}" allow="autoplay" title="Reprodutor de vídeo"></iframe>`;
     }
 
     function carregarFilmes() {
@@ -93,48 +104,55 @@
           Object.values(dados).forEach(filme => {
             const div = document.createElement("div");
             div.className = "filme";
-            div.setAttribute("tabindex", "0");
+            div.setAttribute("role", "article");
             div.innerHTML = `
-              <strong>${filme.titulo}</strong><br>
+              <h2>${filme.titulo}</h2>
               ${gerarEmbed(filme.link)}
               <div class="botoes">
-                <a href="${filme.link}" target="_blank" tabindex="0">Abrir Link</a>
-                <a href="https://wa.me/?text=Assista%20a%20${encodeURIComponent(filme.titulo)}%20em%20${encodeURIComponent(filme.link)}" target="_blank" tabindex="0">Compartilhar no WhatsApp</a>
+                <a href="${filme.link}" target="_blank">Abrir Link</a>
+                <a href="https://wa.me/?text=Assista%20a%20${encodeURIComponent(filme.titulo)}%20em%20${encodeURIComponent(filme.link)}" target="_blank">Compartilhar no WhatsApp</a>
               </div>
             `;
             lista.appendChild(div);
           });
-          atualizarFoco();
+          // Focus will be handled naturally by the browser
         } else {
           lista.innerHTML = "<p>Nenhum filme cadastrado ainda.</p>";
         }
       });
     }
 
-    let focusIndex = 0;
-
-    function atualizarFoco() {
-      const focaveis = document.querySelectorAll('[tabindex="0"]');
-      focaveis.forEach(el => el.classList.remove("focused"));
-      if (focaveis.length > 0) {
-        const el = focaveis[focusIndex];
-        el.classList.add("focused");
-        el.focus();
-      }
-    }
-
+    // Instead of managing focus manually, we'll enhance the natural keyboard navigation
     document.addEventListener("keydown", e => {
-      const focaveis = document.querySelectorAll('[tabindex="0"]');
-      if (e.key === "ArrowDown") {
-        focusIndex = (focusIndex + 1) % focaveis.length;
-        atualizarFoco();
-        e.preventDefault();
-      } else if (e.key === "ArrowUp") {
-        focusIndex = (focusIndex - 1 + focaveis.length) % focaveis.length;
-        atualizarFoco();
-        e.preventDefault();
-      } else if (e.key === "Enter") {
-        focaveis[focusIndex]?.click?.();
+      // Only handle arrow keys inside our movie list region
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && e.target.closest('#listaFilmes')) {
+        const currentElement = document.activeElement;
+        const movies = Array.from(document.querySelectorAll('.filme'));
+        
+        // Find the current and determine the next one to focus
+        const currentIndex = movies.indexOf(currentElement.closest('.filme'));
+        let nextIndex;
+        
+        if (e.key === "ArrowDown") {
+          nextIndex = (currentIndex + 1) % movies.length;
+          e.preventDefault();
+        } else if (e.key === "ArrowUp") {
+          nextIndex = (currentIndex - 1 + movies.length) % movies.length;
+          e.preventDefault();
+        }
+        
+        // Find the first focusable element in the next movie and focus it
+        const nextMovie = movies[nextIndex];
+        const firstFocusable = nextMovie.querySelector('a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (firstFocusable) {
+          firstFocusable.focus();
+        } else {
+          // If no focusable element, make the movie container itself focusable temporarily
+          nextMovie.setAttribute('tabindex', '-1');
+          nextMovie.focus();
+          // Remove the tabindex after focus
+          setTimeout(() => nextMovie.removeAttribute('tabindex'), 100);
+        }
       }
     });
 
